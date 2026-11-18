@@ -161,6 +161,10 @@
   .nav{position:absolute;top:50%;transform:translateY(-50%);border-radius:999px;border:0;background:var(--yellow);color:var(--ink);font-size:13.5px;font-weight:700;cursor:pointer;padding:10px 16px}
   .nav.p{left:10px}.nav.n{right:10px}
   .lb-cap{padding:12px 16px 22px;font-size:14px;text-align:center;min-height:46px;word-break:keep-all;color:#ddd}
+  .lb-foot{justify-content:center;padding:0 16px calc(16px + env(safe-area-inset-bottom))}
+  .save-btn{display:inline-flex;align-items:center;gap:8px;background:var(--yellow);color:var(--ink);border:0;border-radius:999px;padding:12px 22px;font-weight:700;font-size:15px;cursor:pointer}
+  .save-btn svg{width:17px;height:17px}
+  .save-btn:disabled{opacity:.6}
   .confirm{display:none;gap:6px;align-items:center;font-size:12.5px}
   .confirm.show{display:flex}
   .bar-prog{height:3px;background:rgba(255,255,255,.12)}
@@ -270,7 +274,8 @@
     #lbIdx{display:none}
     .lb-stage{padding:0}
     .nav{display:none}
-    .lb-cap{font-size:13px;padding:10px 16px calc(18px + env(safe-area-inset-bottom))}
+    .lb-cap{font-size:13px;padding:10px 16px 12px;min-height:0}
+    #lbOpen{display:none}
   }
 </style>
 </head>
@@ -387,6 +392,7 @@
     <div class="acts">
       <span id="lbIdx" style="opacity:.6;font-size:12px;margin-right:4px"></span>
       <button class="lb-btn" id="lbPlay" aria-label="슬라이드쇼"><span class="m-only ico pl"><svg viewBox="0 0 16 16"><path d="M4 2.5v11l9-5.5z" fill="currentColor"/></svg></span><span class="m-only ico pa"><svg viewBox="0 0 16 16"><path d="M4 2.5h3v11H4zM9 2.5h3v11H9z" fill="currentColor"/></svg></span><span class="d-only pl">슬라이드쇼</span><span class="d-only pa">멈춤</span></button>
+      <button class="lb-btn d-only" id="lbSave">저장</button>
       <a class="lb-btn" id="lbOpen" href="#" target="_blank" rel="noopener" aria-label="원본 열기"><span class="m-only ico"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2.5h4.5V7M13.5 2.5 7 9M11.5 9.5v3.5h-9v-9H6"/></svg></span><span class="d-only">원본 열기</span></a>
       <button class="lb-btn danger" id="lbDel" hidden aria-label="삭제"><span class="m-only ico"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 4h11M6 4V2.5h4V4M4 4l.7 9.5h6.6L12 4"/></svg></span><span class="d-only">삭제</span></button>
       <span class="confirm" id="lbConfirm">지울까요? <button class="lb-btn danger" id="lbDelYes">삭제</button><button class="lb-btn" id="lbDelNo">취소</button></span>
@@ -399,6 +405,7 @@
     <button class="nav n" id="lbNext">다음</button>
   </div>
   <div class="lb-cap" id="lbCap"></div>
+  <div class="lb-foot m-only"><button class="save-btn" id="lbSaveM"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.5v8M4.5 7 8 10.5 11.5 7M2.5 13.5h11"/></svg><span>사진 저장</span></button></div>
 </div>
 
 <div class="scrim" id="adminScrim">
@@ -531,7 +538,54 @@
     $("lbDel").hidden = !mine || !!playTimer;
     $("lbConfirm").classList.remove("show");
     const nx = view[(lbIndex+1)%view.length]; if(nx){ const i=new Image(); i.src=pub(nx.path); }
+    if(TOUCH && !playTimer) getBlob(p).catch(()=>{});
   }
+  // ---------- save to device ----------
+  const TOUCH = matchMedia("(pointer:coarse)").matches;
+  const blobCache = new Map();
+  function getBlob(p){
+    if(!blobCache.has(p.id)){
+      if(blobCache.size > 6) blobCache.delete(blobCache.keys().next().value);
+      const pr = fetch(pub(p.path), { mode:"cors" }).then(r=>{ if(!r.ok) throw new Error("http "+r.status); return r.blob(); });
+      pr.catch(()=>blobCache.delete(p.id));
+      blobCache.set(p.id, pr);
+    }
+    return blobCache.get(p.id);
+  }
+  function fileName(p, type){
+    const ext = type==="image/png"?"png":type==="image/webp"?"webp":type==="image/gif"?"gif":"jpg";
+    const who = (p.who||"photo").replace(/[^0-9A-Za-z가-힣._-]+/g,"_").slice(0,24);
+    return "mondayproject_"+who+"_"+p.id.slice(0,6)+"."+ext;
+  }
+  let saving = false;
+  async function savePhoto(){
+    const p = view[lbIndex]; if(!p || saving) return;
+    saving = true; $("lbSaveM").disabled = true; $("lbSave").disabled = true;
+    try{
+      const blob = await getBlob(p);
+      const type = blob.type || "image/jpeg";
+      const file = new File([blob], fileName(p,type), { type });
+      if(TOUCH && navigator.canShare && navigator.canShare({ files:[file] })){
+        try{ await navigator.share({ files:[file] }); }
+        catch(e){
+          if(e && e.name==="AbortError") return;
+          if(e && e.name==="NotAllowedError"){ toast("한 번 더 눌러 주세요"); return; }
+          throw e;
+        }
+      }else{
+        const url = URL.createObjectURL(file);
+        const a = document.createElement("a"); a.href=url; a.download=file.name; document.body.append(a); a.click(); a.remove();
+        setTimeout(()=>URL.revokeObjectURL(url), 5000);
+        toast(TOUCH ? "다운로드에 저장했어요" : "사진을 저장했어요");
+      }
+    }catch(e){
+      const a = document.createElement("a"); a.href = pub(p.path)+"?download="+encodeURIComponent(fileName(p,"image/jpeg")); a.target="_blank"; a.rel="noopener";
+      document.body.append(a); a.click(); a.remove();
+    }finally{
+      saving = false; $("lbSaveM").disabled = false; $("lbSave").disabled = false;
+    }
+  }
+  $("lbSave").onclick = savePhoto; $("lbSaveM").onclick = savePhoto;
   const step = (d)=>{ if(!view.length) return; lbIndex=(lbIndex+d+view.length)%view.length; syncLb(); if(playTimer) restartTick(); };
   function tick(){ const t=(performance.now()-playStart)/SLIDE_MS; $("prog").style.width=Math.min(100,t*100)+"%"; rafId=requestAnimationFrame(tick); }
   function restartTick(){ clearInterval(playTimer); playStart=performance.now(); playTimer=setInterval(()=>{ lbIndex=(lbIndex+1)%view.length; syncLb(); playStart=performance.now(); }, SLIDE_MS); }
