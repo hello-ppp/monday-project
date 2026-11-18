@@ -290,8 +290,8 @@
       <button type="button" data-d="d16" aria-pressed="true">MON 11.16 본행사</button>
     </div>
 
-    <label class="f" for="who">이름 · 브랜드명 <span>(사진 아래 표시돼요)</span></label>
-    <input class="in" id="who" maxlength="30" placeholder="예) tony._.cafe">
+    <label class="f" for="who">올린 사람 <span>(사진 아래 표시돼요)</span></label>
+    <input class="in" id="who" maxlength="30" placeholder="이름 또는 닉네임">
 
     <label class="f" for="cap">한 줄 메모 <span>(선택 · 이번에 올리는 사진 모두에 붙어요)</span></label>
     <input class="in" id="cap" maxlength="80" placeholder="예) 오픈 직전, 골목에 햇빛 들던 순간">
@@ -568,7 +568,7 @@
   }
   $("doUp").onclick = async () => {
     const who = $("who").value.trim().slice(0,30);
-    if(!who){ $("err").textContent="이름이나 브랜드명을 적어 주세요"; $("who").focus(); return; }
+    if(!who){ $("err").textContent="올린 사람 이름을 적어 주세요"; $("who").focus(); return; }
     lsSet(LS_WHO, who);
     const caption = $("cap").value.trim().slice(0,80);
     uploading = true; updateBtn(); $("err").textContent="";
